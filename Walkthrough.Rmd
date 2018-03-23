@@ -59,21 +59,21 @@ Download the data here (https://www.ibm.com/communities/analytics/watson-analyti
 
 ```{r Load Data, include=TRUE}
 # Read excel data
-hr_data_raw_tbl <- read_excel(path = "WA_Fn-UseC_-HR-Employee-Attrition.xlsx")
+hr_data_raw <- read_excel(path = "WA_Fn-UseC_-HR-Employee-Attrition.xlsx")
 ```
 
 Let’s check out the raw data. It’s 1470 rows (observations) by 35 columns (features). The “Attrition” column is our target. We’ll use all other columns as features to our model.
 
 ```{r First 10 Rows, include=TRUE}
 # View first 10 rows
-hr_data_raw_tbl[1:10,] %>%
+hr_data_raw[1:10,] %>%
     knitr::kable(caption = "First 10 rows")
 ```
 
 The only pre-processing we’ll do in this example is change all character data types to factors. This is needed for H2O. We could make a number of other numeric data that is actually categorical factors, but this tends to increase modeling time and can have little improvement on model performance.
 
 ```{r Data Pre-processing, include=TRUE}
-hr_data_organized_tbl <- hr_data_raw_tbl %>%
+hr_data_organized_tbl <- hr_data_raw %>%
   mutate_if(is.character, as.factor) %>%
   select(Attrition, everything())
 ```
@@ -93,27 +93,15 @@ We are going to use the h2o.automl() function from the H2O platform to model emp
 First, we need to initialize the Java Virtual Machine (JVM) that H2O uses locally.
 
 ```{r Initialize Java, include=TRUE}
-#Recipe code to help h2o run.
-recipe_obj <- hr_data_organized_tbl %>%
-  recipe(formula = Attrition ~ .) %>%
-  step_rm(EmployeeNumber) %>%
-  step_zv(all_predictors()) %>%
-  step_center(all_numeric()) %>%
-  step_scale(all_numeric()) %>%
-  prep(data = hr_data_organized_tbl)
-
-hr_data_bake_tbl <- bake(recipe_obj, newdata = hr_data_organized_tbl) 
-
 # Initialize H2O JVM
 h2o.init()
-h2o.no_progress() # Turn off output of progress bars
 ```
 
 Next, we change our data to an h2o object that the package can interpret. We also split the data into training, validation, and test sets. Our preference is to use 70%, 15%, 15%, respectively.
 
 ```{r Split the data into training, validation, and tests sets, include=TRUE}
 # Split data into Train/Validation/Test Sets
-hr_data_bake_h2o <- as.h2o(hr_data_bake_tbl)
+hr_data_bake_h2o <- as.h2o(hr_data_organized_tbl)
 
 hr_data_split <- h2o.splitFrame(hr_data_bake_h2o, ratios = c(0.7, 0.15), seed = 1234)
 
@@ -287,7 +275,7 @@ Now the fun part, we create an explainer using the lime() function. Just pass th
 
 ```{r Run LIME on training set, include=TRUE}
 # Run lime() on training set
-explainer <- lime::lime(
+explainer <- lime(
   as.data.frame(train_h2o[,-1]), 
   model          = automl_leader, 
   bin_continuous = FALSE
@@ -381,7 +369,7 @@ subtitle = "Suggests that increased overtime is related to higher attrition"
 
 Several job roles are experiencing more turnover. Sales reps have the highest turnover at about 40% followed by Lab Technician, Human Resources, Sales Executive, and Research Scientist. It may be worthwhile to investigate what localized issues could be creating the high turnover among these groups within the organization.
 
-```{r Overtime as a Cause, include=TRUE}
+```{r Job Role as a Cause, include=TRUE}
 attrition_critical_features %>%
 group_by(JobRole, Attrition) %>% 
 summarize(
